@@ -1,0 +1,12 @@
+mod app_home;
+mod cache;
+pub use app_home::*;
+pub use cache::*;
+pub const APP_HOME_ENV_VAR: &str = "TEAMY_MTG_DATA_DIR";
+pub const APP_HOME_DIR_NAME: &str = "teamy-mtg";
+pub const APP_CACHE_ENV_VAR: &str = "TEAMY_MTG_CACHE_DIR";
+pub const APP_CACHE_DIR_NAME: &str = "teamy-mtg";
+mod clean_result;
+pub use clean_result::*;
+mod app_paths;
+pub use app_paths::*;
