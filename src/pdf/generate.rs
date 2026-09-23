@@ -22,7 +22,11 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
         Paper::A4 => (210.0, 297.0),
         Paper::Letter => (215.9, 279.4),
     };
-    let (cw, ch, gap) = (63.0, 88.0, options.gap);
+    ensure!(
+        options.scale.is_finite() && options.scale > 0.0,
+        "Scale must be a finite number greater than zero"
+    );
+    let (cw, ch, gap) = (63.0 * options.scale, 88.0 * options.scale, options.gap);
     ensure!(
         gap.is_finite() && gap >= 0.0,
         "Gap must be a finite, non-negative number of millimetres"
@@ -41,7 +45,10 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
         options.output.display()
     );
     let mut slots = Vec::new();
+    let mut deck_cards = 0usize;
+    let mut double_faced_cards = 0usize;
     for item in deck {
+        deck_cards += item.quantity as usize;
         let images = item
             .card
             .images()
@@ -53,6 +60,9 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
             "No printable image for '{}'",
             item.card.name
         );
+        if images.len() > 1 {
+            double_faced_cards += item.quantity as usize;
+        }
         if item.card.image_uris.is_empty() {
             ensure!(
                 images.len() == item.card.card_faces.len(),
@@ -112,11 +122,61 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
         (pw - 3.0 * cw - 2.0 * gap) / 2.0,
         (ph - 3.0 * ch - 2.0 * gap) / 2.0,
     );
-    let mut page_ids = Vec::new();
+    let proxy_pages = slots.len().div_ceil(9);
+    let regular_font = doc.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let bold_font = doc.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica-Bold",
+    });
+    let paper_name = match options.paper {
+        Paper::A4 => "A4",
+        Paper::Letter => "Letter",
+    };
+    let reminder_ops = super::reminder_page::operations(
+        pw,
+        ph,
+        &super::reminder_page::Reminder {
+            paper: paper_name,
+            deck_cards,
+            faces: slots.len(),
+            double_faced_cards,
+            proxy_pages,
+            card_width_mm: cw,
+            card_height_mm: ch,
+            scale: options.scale,
+        },
+    );
+    let reminder_contents = doc.add_object(Stream::new(
+        dictionary! {},
+        Content {
+            operations: reminder_ops,
+        }
+        .encode()?,
+    ));
+    let reminder_page = doc.add_object(dictionary! {
+        "Type" => "Page", "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), mm(pw).into(), mm(ph).into()],
+        "Resources" => dictionary! {
+            "Font" => dictionary! { "F1" => regular_font, "F2" => bold_font },
+        },
+        "Contents" => reminder_contents,
+    });
+    let mut page_ids = vec![reminder_page];
     for page_slots in slots.chunks(9) {
         api.check_cancelled()?;
         let mut objects = lopdf::Dictionary::new();
         let mut ops = Vec::new();
+        if options.guidelines {
+            super::guidelines::append(
+                &mut ops,
+                [pw, ph],
+                [left, ph - top],
+                [cw, ch],
+                gap,
+                page_slots.len(),
+            );
+        }
         for (index, (_, url)) in page_slots.iter().enumerate() {
             let name = format!("Im{index}");
             objects.set(name.clone(), image_ids[url]);
@@ -152,8 +212,18 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
         "Type" => "Pages", "Kids" => page_ids.iter().copied().map(Object::Reference).collect::<Vec<_>>(),
         "Count" => page_ids.len() as i64,
     }.into());
-    let root = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
-    let info = doc.add_object(dictionary! { "Producer" => Object::string_literal("teamy-mtg"), "Title" => Object::string_literal("Proxy cards - print at 100% scale") });
+    let root = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+        "ViewerPreferences" => dictionary! {
+            "PrintScaling" => "None",
+            "PickTrayByPDFSize" => Object::Boolean(true),
+        },
+    });
+    let info = doc.add_object(dictionary! {
+        "Producer" => Object::string_literal("teamy-mtg"),
+        "Title" => Object::string_literal("Proxy cards - print at 100% scale and exclude page 1"),
+    });
     doc.trailer.set("Root", root);
     doc.trailer.set("Info", info);
     let mut staged = tempfile::NamedTempFile::new_in(parent)?;
@@ -167,8 +237,11 @@ pub fn generate(deck: &[DeckCard], options: Options<'_>, api: &mut Scryfall) -> 
     Ok(PdfSummary {
         output: options.output.display().to_string(),
         pages: page_ids.len(),
+        proxy_pages,
         faces: slots.len(),
-        card_width_mm: 63,
-        card_height_mm: 88,
+        double_faced_cards,
+        card_width_mm: cw,
+        card_height_mm: ch,
+        scale: options.scale,
     })
 }

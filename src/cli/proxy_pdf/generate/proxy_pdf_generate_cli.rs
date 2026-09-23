@@ -3,7 +3,7 @@ use crate::cli::output::CliOutput;
 use arbitrary::Arbitrary;
 use facet::Facet;
 use figue as args;
-/// Generate 63 x 88 mm card cutouts, nine per page. Print at 100% scale.
+/// Generate card cutouts in a 3 x 3 grid. Print at 100% scale and exclude page 1.
 #[derive(Facet, Arbitrary, Debug, PartialEq)]
 #[facet(rename_all = "kebab-case")]
 pub struct ProxyPdfGenerateArgs {
@@ -23,6 +23,13 @@ pub struct ProxyPdfGenerateArgs {
     #[facet(args::named)]
     #[arbitrary(default)]
     pub gap: Option<f32>,
+    /// Card-size multiplier (default 1.0). Must fit a 3 x 3 grid on the selected paper.
+    #[facet(args::named)]
+    #[arbitrary(default)]
+    pub scale: Option<f32>,
+    /// Draw full-page cutting guidelines behind the cards (default true).
+    #[facet(args::named, default = true)]
+    pub guidelines: bool,
     /// Use cached images only.
     #[facet(args::named, default)]
     pub offline: bool,
@@ -43,6 +50,8 @@ impl ProxyPdfGenerateArgs {
                 paper: self.paper.unwrap_or(crate::pdf::Paper::A4),
                 faces: self.faces.unwrap_or(crate::pdf::Faces::All),
                 gap: self.gap.unwrap_or(0.0),
+                scale: self.scale.unwrap_or(1.0),
+                guidelines: self.guidelines,
                 offline: self.offline,
                 force: self.force,
             },

@@ -1,9 +1,11 @@
 mod cut_marks;
 mod faces;
 mod generate;
+mod guidelines;
 mod options;
 mod paper;
 mod pdf_summary;
+mod reminder_page;
 pub use faces::*;
 pub use generate::*;
 pub use options::*;

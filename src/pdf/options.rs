@@ -9,6 +9,8 @@ pub struct Options<'a> {
     pub paper: Paper,
     pub faces: Faces,
     pub gap: f32,
+    pub scale: f32,
+    pub guidelines: bool,
     pub offline: bool,
     pub force: bool,
 }

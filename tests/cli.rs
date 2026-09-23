@@ -95,9 +95,9 @@ fn card(base: &str, id: &str) -> teamy_mtg::model::Card {
     }
 }
 
-fn assert_pdf_grid(path: &Path, gap_mm: f32) {
+fn assert_pdf_grid(path: &Path, gap_mm: f32, scale: f32, guidelines: bool) {
     let doc = lopdf::Document::load(path).unwrap();
-    let page = *doc.get_pages().values().next().unwrap();
+    let page = *doc.get_pages().values().nth(1).unwrap();
     let content = lopdf::content::Content::decode(&doc.get_page_content(page).unwrap()).unwrap();
     let placements: Vec<_> = content
         .operations
@@ -108,15 +108,21 @@ fn assert_pdf_grid(path: &Path, gap_mm: f32) {
     let x = |i: usize| placements[i].operands[4].as_float().unwrap();
     let y = |i: usize| placements[i].operands[5].as_float().unwrap();
     let mm = |v: f32| v * 72.0 / 25.4;
-    assert!((x(1) - x(0) - mm(63.0 + gap_mm)).abs() < 0.001);
-    assert!((y(0) - y(3) - mm(88.0 + gap_mm)).abs() < 0.001);
+    assert!((x(1) - x(0) - mm(63.0 * scale + gap_mm)).abs() < 0.001);
+    assert!((y(0) - y(3) - mm(88.0 * scale + gap_mm)).abs() < 0.001);
+    let cut_mark_lines = if gap_mm == 0.0 { 16 } else { 24 };
+    let guideline_lines = if guidelines {
+        if gap_mm == 0.0 { 8 } else { 12 }
+    } else {
+        0
+    };
     assert_eq!(
         content
             .operations
             .iter()
             .filter(|op| op.operator == "S")
             .count(),
-        if gap_mm == 0.0 { 16 } else { 24 }
+        cut_mark_lines + guideline_lines
     );
     // Every cut mark stays outside the entire card grid, including shared seams.
     for op in content
@@ -128,9 +134,9 @@ fn assert_pdf_grid(path: &Path, gap_mm: f32) {
         let py = op.operands[1].as_float().unwrap();
         assert!(
             px <= x(0) + 0.001
-                || px >= x(2) + mm(63.0) - 0.001
+                || px >= x(2) + mm(63.0 * scale) - 0.001
                 || py <= y(6) + 0.001
-                || py >= y(0) + mm(88.0) - 0.001
+                || py >= y(0) + mm(88.0 * scale) - 0.001
         );
     }
 }
@@ -237,20 +243,56 @@ fn preplan_workflow_json_decks_image_sync_and_offline_pdf() {
         "--offline",
     ];
     let summary = ok::<PdfSummary>(dir.path(), base, &args);
-    assert_eq!(summary.pages, 2);
+    assert_eq!(summary.pages, 3);
+    assert_eq!(summary.proxy_pages, 2);
     assert_eq!(summary.faces, 10);
-    assert_pdf_grid(&pdf, 0.0);
+    assert_eq!(summary.double_faced_cards, 0);
+    assert_pdf_grid(&pdf, 0.0, 1.0, true);
     let doc = lopdf::Document::load(&pdf).unwrap();
-    assert_eq!(doc.get_pages().len(), 2);
+    assert_eq!(doc.get_pages().len(), 3);
+    let catalog = doc
+        .trailer
+        .get(b"Root")
+        .unwrap()
+        .as_reference()
+        .and_then(|id| doc.get_object(id))
+        .unwrap()
+        .as_dict()
+        .unwrap();
+    let viewer_preferences = catalog
+        .get(b"ViewerPreferences")
+        .unwrap()
+        .as_dict()
+        .unwrap();
+    assert_eq!(
+        viewer_preferences
+            .get(b"PrintScaling")
+            .unwrap()
+            .as_name()
+            .unwrap(),
+        b"None"
+    );
+    let reminder = *doc.get_pages().values().next().unwrap();
+    let reminder_content =
+        lopdf::content::Content::decode(&doc.get_page_content(reminder).unwrap()).unwrap();
+    let reminder_text = reminder_content
+        .operations
+        .iter()
+        .filter(|op| op.operator == "Tj")
+        .map(|op| String::from_utf8_lossy(op.operands[0].as_str().unwrap()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(reminder_text.contains("Double-faced cards: 0"));
+    assert!(reminder_text.contains("exclude this reminder page"));
     let page = doc
-        .get_object(*doc.get_pages().values().next().unwrap())
+        .get_object(*doc.get_pages().values().nth(1).unwrap())
         .unwrap()
         .as_dict()
         .unwrap();
     let media = page.get(b"MediaBox").unwrap().as_array().unwrap();
     assert!((media[2].as_float().unwrap() - 595.2756).abs() < 0.01);
     let contents = doc
-        .get_page_content(*doc.get_pages().values().next().unwrap())
+        .get_page_content(*doc.get_pages().values().nth(1).unwrap())
         .unwrap();
     let content = lopdf::content::Content::decode(&contents).unwrap();
     let placement = content
@@ -297,21 +339,49 @@ fn preplan_workflow_json_decks_image_sync_and_offline_pdf() {
         ),
         paths
     );
-    let mut args = args.to_vec();
-    args.extend(["--force", "--paper", "letter"]);
-    assert_eq!(ok::<PdfSummary>(dir.path(), offline, &args).faces, 10);
-    assert_pdf_grid(&pdf, 0.0);
-    args.extend(["--gap", "1.5"]);
-    assert_eq!(ok::<PdfSummary>(dir.path(), offline, &args).faces, 10);
-    assert_pdf_grid(&pdf, 1.5);
+    let mut letter_args = args.to_vec();
+    letter_args.extend(["--force", "--paper", "letter"]);
+    assert_eq!(
+        ok::<PdfSummary>(dir.path(), offline, &letter_args).faces,
+        10
+    );
+    assert_pdf_grid(&pdf, 0.0, 1.0, true);
+    letter_args.extend(["--gap", "1.5"]);
+    assert_eq!(
+        ok::<PdfSummary>(dir.path(), offline, &letter_args).faces,
+        10
+    );
+    assert_pdf_grid(&pdf, 1.5, 1.0, true);
     let spaced_pdf = std::fs::read(&pdf).unwrap();
     for gap in ["-1", "NaN", "inf", "100"] {
-        *args.last_mut().unwrap() = gap;
+        *letter_args.last_mut().unwrap() = gap;
         assert!(
-            !cli(dir.path(), offline, &args).status.success(),
+            !cli(dir.path(), offline, &letter_args).status.success(),
             "gap {gap} must fail"
         );
         assert_eq!(std::fs::read(&pdf).unwrap(), spaced_pdf);
+    }
+    let mut scaled_args = args.to_vec();
+    scaled_args.extend(["--force", "--scale", "1.1"]);
+    let scaled = ok::<PdfSummary>(dir.path(), offline, &scaled_args);
+    assert_eq!(scaled.scale, 1.1);
+    assert!((scaled.card_width_mm - 69.3).abs() < 0.001);
+    assert_pdf_grid(&pdf, 0.0, 1.1, true);
+    let mut no_guidelines_args = args.to_vec();
+    no_guidelines_args.extend(["--force", "--no-guidelines"]);
+    ok::<PdfSummary>(dir.path(), offline, &no_guidelines_args);
+    assert_pdf_grid(&pdf, 0.0, 1.0, false);
+    let unscaled_pdf = std::fs::read(&pdf).unwrap();
+    for scale in ["0", "-1", "NaN", "inf", "2"] {
+        let mut invalid_scale_args = args.to_vec();
+        invalid_scale_args.extend(["--force", "--scale", scale]);
+        assert!(
+            !cli(dir.path(), offline, &invalid_scale_args)
+                .status
+                .success(),
+            "scale {scale} must fail"
+        );
+        assert_eq!(std::fs::read(&pdf).unwrap(), unscaled_pdf);
     }
     assert_eq!(
         ok::<Vec<Card>>(dir.path(), offline, &["card", "search", "zulaport"])[0].name,

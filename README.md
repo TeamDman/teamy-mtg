@@ -167,16 +167,25 @@ teamy-mtg proxy-pdf generate --deck my-deck-1 a.pdf --paper letter --offline
 teamy-mtg proxy-pdf generate --deck my-deck-1 fronts.pdf --faces front
 teamy-mtg proxy-pdf generate --deck my-deck-1 backs.pdf --faces back
 teamy-mtg proxy-pdf generate --deck my-deck-1 spaced.pdf --gap 2
+teamy-mtg proxy-pdf generate --deck my-deck-1 enlarged.pdf --scale 1.05
+teamy-mtg proxy-pdf generate --deck my-deck-1 marks-only.pdf --no-guidelines
 ```
 
-PDFs contain 63 × 88 mm images in a centered 3 × 3 grid with no gap by default,
-so adjacent cards share a single cut edge. Use `--gap MM` for optional spacing
-(for example, `--gap 2` restores a 2 mm gap). Gaps must be finite, non-negative,
-and small enough to fit the grid and cut marks on the selected paper.
-Cut marks sit outside the grid, keeping them off the card artwork.
+Page 1 summarizes the deck and double-faced card count, lists the required print
+settings, and reminds you to exclude that page from printing. Proxy pages contain
+63 × 88 mm images in a centered 3 × 3 grid with no gap by default, so adjacent
+cards share a single cut edge. Full-page cutting guidelines are drawn behind card
+art by default; use `--no-guidelines` to retain only the short cut marks. Use
+`--gap MM` for optional spacing (for example, `--gap 2` restores a 2 mm gap).
+`--scale FACTOR` changes the physical card dimensions from their 63 × 88 mm base.
+Scale and gap values must be finite, positive where applicable, and small enough
+to fit the grid and cut marks on the selected paper. Cut marks sit outside the
+grid, keeping them off the card artwork.
 A4 is the default; Letter is supported. Print at **100% / actual size**, with
-printer scaling disabled. Images are embedded as high-quality JPEG data, reused
-within the PDF for repeated cards. No Python or external PDF tool is needed at runtime.
+printer scaling and added margins disabled. PDFs request no viewer print scaling,
+but print dialogs can ignore that preference. Images are embedded as high-quality
+JPEG data, reused within the PDF for repeated cards. No Python or external PDF tool
+is needed at runtime.
 
 `--faces all` (default) prints each face as a separate cutout. These are not
 duplex-aligned sheets. Single-image split/adventure cards remain one cutout;
