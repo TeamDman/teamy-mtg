@@ -17,8 +17,10 @@ impl CacheShowArgs {
         reason = "command invoke methods share the async CLI dispatch shape"
     )]
     pub async fn invoke(self, paths: &crate::paths::AppPaths) -> Result<CliOutput> {
-        Ok(CliOutput::facet(CacheShowReport {
+        let value = CacheShowReport {
             path: paths.image_dir.display().to_string(),
-        }))
+        };
+        let elapsed_duration_warn_threshold = Some(std::time::Duration::from_secs(1));
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

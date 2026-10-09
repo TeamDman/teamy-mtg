@@ -16,11 +16,12 @@ impl CardImageSyncArgs {
         ctx.cancellation.bail_if_cancelled()?;
         let cards = ctx.decks.resolve(&self.deck, &ctx.db)?;
         let mut api = ctx.api()?;
-        Ok(CliOutput::facet(crate::images::sync(
-            &cards,
-            &ctx.image_dir,
-            &mut api,
-            &ctx.cancellation,
-        )?))
+        let value = crate::images::sync(&cards, &ctx.image_dir, &mut api, &ctx.cancellation)?;
+        let elapsed_duration_warn_threshold = crate::elapsed_duration::work_budget(
+            3,
+            cards.iter().map(|item| item.card.images().len()).sum(),
+            601000,
+        );
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

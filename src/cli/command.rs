@@ -31,6 +31,17 @@ pub enum Command {
 }
 
 impl Command {
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Cache(_) => "cache",
+            Self::Home(_) => "home",
+            Self::Db(_) => "db",
+            Self::Card(_) => "card",
+            Self::Deck(_) => "deck",
+            Self::ProxyPdf(_) => "proxy-pdf",
+        }
+    }
     /// # Errors
     ///
     /// This function will return an error if the subcommand fails.

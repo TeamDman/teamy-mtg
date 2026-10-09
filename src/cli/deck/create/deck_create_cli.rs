@@ -14,6 +14,8 @@ pub struct DeckCreateArgs {
 impl DeckCreateArgs {
     pub fn invoke(self, ctx: &mut AppContext) -> eyre::Result<CliOutput> {
         ctx.cancellation.bail_if_cancelled()?;
-        Ok(CliOutput::facet(ctx.decks.create(&self.name)?))
+        let value = ctx.decks.create(&self.name)?;
+        let elapsed_duration_warn_threshold = Some(std::time::Duration::from_secs(3));
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

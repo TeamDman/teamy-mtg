@@ -57,6 +57,20 @@ impl ProxyPdfGenerateArgs {
             },
             &mut api,
         )?;
-        Ok(CliOutput::facet(summary))
+        let value = summary;
+        let elapsed_duration_warn_threshold = crate::elapsed_duration::work_budget(
+            3,
+            cards
+                .iter()
+                .map(|item| {
+                    item.card
+                        .images()
+                        .len()
+                        .saturating_mul(item.quantity as usize)
+                })
+                .sum(),
+            if self.offline { 1000 } else { 602000 },
+        );
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

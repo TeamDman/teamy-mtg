@@ -21,10 +21,11 @@ impl DeckCardAddArgs {
     pub fn invoke(self, ctx: &mut AppContext) -> eyre::Result<CliOutput> {
         ctx.cancellation.bail_if_cancelled()?;
         let card = ctx.db.resolve_card(&self.card)?;
-        Ok(CliOutput::facet(ctx.decks.add(
-            &self.deck,
-            &card,
-            self.quantity.unwrap_or(1),
-        )?))
+        let value = ctx
+            .decks
+            .add(&self.deck, &card, self.quantity.unwrap_or(1))?;
+        let elapsed_duration_warn_threshold =
+            crate::elapsed_duration::work_budget(3, value.cards.len(), 20);
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

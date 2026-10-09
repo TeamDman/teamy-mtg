@@ -4,6 +4,7 @@
 pub mod cli;
 pub mod db;
 pub mod decks;
+mod elapsed_duration;
 pub mod images;
 pub mod logging_init;
 pub mod model;
@@ -104,9 +105,25 @@ pub fn main() -> eyre::Result<()> {
     } else {
         cli.global_args.output_format
     };
-    let output = cli.invoke(cancellation_token.clone())?;
-    cancellation_token.bail_if_cancelled()?;
-    output.emit(requested_output_format)?;
-    cancellation_token.bail_if_cancelled()?;
-    Ok(())
+    let command_name = cli.command.name();
+    tracing::debug!(command = command_name, "Dispatching command");
+    let result = (|| -> eyre::Result<()> {
+        let _command_span = tracing::info_span!("command", command = command_name).entered();
+        let started = std::time::Instant::now();
+        let output = cli.invoke(cancellation_token.clone())?;
+        let threshold = output.elapsed_duration_warn_threshold;
+        let emitted = cancellation_token
+            .bail_if_cancelled()
+            .and_then(|()| output.emit(requested_output_format));
+        elapsed_duration::warn_if_exceeded(command_name, started.elapsed(), threshold);
+        emitted?;
+        cancellation_token.bail_if_cancelled()?;
+        Ok(())
+    })();
+    tracing::debug!(
+        command = command_name,
+        success = result.is_ok(),
+        "Command finished"
+    );
+    result
 }

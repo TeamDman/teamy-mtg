@@ -22,10 +22,9 @@ impl CardSearchArgs {
         ctx.cancellation.bail_if_cancelled()?;
         let query = crate::search::Query::parse(&self.query)?;
         let limit = crate::cli::context::limit(self.limit)?;
-        Ok(CliOutput::facet(ctx.db.search(
-            &query,
-            limit,
-            self.offset.unwrap_or(0),
-        )?))
+        let value = ctx.db.search(&query, limit, self.offset.unwrap_or(0))?;
+        let elapsed_duration_warn_threshold =
+            crate::elapsed_duration::work_budget(3, limit as usize, 10);
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

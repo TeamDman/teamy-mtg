@@ -25,6 +25,6 @@ impl CacheOpenArgs {
                 paths.image_dir.display()
             )
         })?;
-        Ok(CliOutput::none())
+        Ok(CliOutput::none(Some(std::time::Duration::from_secs(3))))
     }
 }

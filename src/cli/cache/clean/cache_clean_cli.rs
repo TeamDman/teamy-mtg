@@ -16,8 +16,9 @@ impl CacheCleanArgs {
         reason = "command invoke methods share the async CLI dispatch shape"
     )]
     pub async fn invoke(self, paths: &crate::paths::AppPaths) -> Result<CliOutput> {
-        Ok(CliOutput::facet(crate::paths::clean_cache(
-            &paths.image_dir,
-        )?))
+        let value = crate::paths::clean_cache(&paths.image_dir)?;
+        let elapsed_duration_warn_threshold =
+            crate::elapsed_duration::work_budget(3, value.entries_removed, 20);
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }

@@ -9,6 +9,9 @@ pub struct DeckListArgs;
 impl DeckListArgs {
     pub fn invoke(self, ctx: &mut AppContext) -> eyre::Result<CliOutput> {
         ctx.cancellation.bail_if_cancelled()?;
-        Ok(CliOutput::facet(ctx.decks.list()?))
+        let value = ctx.decks.list()?;
+        let elapsed_duration_warn_threshold =
+            crate::elapsed_duration::work_budget(3, value.len(), 20);
+        Ok(CliOutput::facet(value, elapsed_duration_warn_threshold))
     }
 }
